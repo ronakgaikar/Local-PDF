@@ -4,6 +4,10 @@ from PIL import Image
 from pdf2image import convert_from_path
 import os
 from PyPDF2 import PdfMerger, PdfReader, PdfWriter
+import fitz  
+from ttkbootstrap import Style
+from ttkbootstrap.widgets import Scale
+
 
 # === Image(s) to PDF ===
 def convert_images_to_pdf():
@@ -137,10 +141,163 @@ def split_pdf():
     except Exception as e:
         messagebox.showerror("Error", f"Failed to split PDF:\n{e}")
 
+def encrypt_pdf():
+    pdf_path = filedialog.askopenfilename(
+        title="Select PDF to Password-Protect",
+        filetypes=[("PDF files", "*.pdf")]
+    )
+
+    if not pdf_path:
+        return
+
+    # Ask for password twice
+    password1 = simpledialog.askstring("Set Password", "Enter password for the PDF:")
+    password2 = simpledialog.askstring("Confirm Password", "Re-enter the password:")
+
+    if not password1 or not password2:
+        messagebox.showwarning("Cancelled", "Password not set.")
+        return
+
+    if password1 != password2:
+        messagebox.showerror("Mismatch", "Passwords do not match.")
+        return
+
+    try:
+        reader = PdfReader(pdf_path)
+        writer = PdfWriter()
+
+        for page in reader.pages:
+            writer.add_page(page)
+
+        writer.encrypt(password1)
+
+        # Auto-generate default filename with "_protected"
+        base_name = os.path.splitext(os.path.basename(pdf_path))[0]
+        default_filename = f"{base_name}_protected.pdf"
+
+        save_path = filedialog.asksaveasfilename(
+            defaultextension=".pdf",
+            initialfile=default_filename,
+            filetypes=[("PDF files", "*.pdf")],
+            title="Save Encrypted PDF As"
+        )
+
+        if save_path:
+            with open(save_path, "wb") as f:
+                writer.write(f)
+            messagebox.showinfo("Success", f"PDF protected with password:\n{save_path}")
+
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to encrypt PDF:\n{e}")
+
+def decrypt_pdf():
+    pdf_path = filedialog.askopenfilename(
+        title="Select a password-protected PDF",
+        filetypes=[("PDF files", "*.pdf")]
+    )
+
+    if not pdf_path:
+        return
+
+    password = simpledialog.askstring("PDF Password", "Enter the password:")
+
+    if not password:
+        messagebox.showwarning("Cancelled", "Password not entered.")
+        return
+
+    try:
+        reader = PdfReader(pdf_path)
+
+        if not reader.is_encrypted:
+            messagebox.showinfo("Info", "This PDF is not password-protected.")
+            return
+
+        if not reader.decrypt(password):
+            messagebox.showerror("Error", "Incorrect password.")
+            return
+
+        writer = PdfWriter()
+
+        for page in reader.pages:
+            writer.add_page(page)
+
+        # Suggest output name like: file_decrypted.pdf
+        base_name = os.path.splitext(os.path.basename(pdf_path))[0]
+        default_filename = f"{base_name}_decrypted.pdf"
+
+        save_path = filedialog.asksaveasfilename(
+            defaultextension=".pdf",
+            initialfile=default_filename,
+            filetypes=[("PDF files", "*.pdf")],
+            title="Save Decrypted PDF As"
+        )
+
+        if save_path:
+            with open(save_path, "wb") as f:
+                writer.write(f)
+            messagebox.showinfo("Success", f"Password removed and saved to:\n{save_path}")
+
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to decrypt PDF:\n{e}")
+
+
+def compress_pdf_with_quality():
+    pdf_path = filedialog.askopenfilename(
+        title="Select PDF to Compress",
+        filetypes=[("PDF files", "*.pdf")]
+    )
+    if not pdf_path:
+        return
+
+    try:
+        level = compression_level.get()
+
+        # Convert level (1–10) to zoom scale (0.8–2.0 range)
+        zoom_scale = 0.6 + (level / 10 * 1.4)  # 1 → 0.74x | 10 → 2.0x
+
+        doc = fitz.open(pdf_path)
+        new_doc = fitz.open()
+
+        for page_num in range(len(doc)):
+            page = doc.load_page(page_num)
+            pix = page.get_pixmap(matrix=fitz.Matrix(zoom_scale, zoom_scale))
+            img_pdf = fitz.open()
+            img_pdf.insert_page(
+                0,
+                width=pix.width,
+                height=pix.height
+            )
+            img_page = img_pdf[0]
+            img_page.insert_image(
+                fitz.Rect(0, 0, pix.width, pix.height),
+                pixmap=pix
+            )
+            new_doc.insert_pdf(img_pdf)
+
+        base_name = os.path.splitext(os.path.basename(pdf_path))[0]
+        default_filename = f"{base_name}_compressed.pdf"
+
+        save_path = filedialog.asksaveasfilename(
+            defaultextension=".pdf",
+            initialfile=default_filename,
+            filetypes=[("PDF files", "*.pdf")],
+            title="Save Compressed PDF As"
+        )
+
+        if save_path:
+            new_doc.save(save_path, deflate=True)
+            new_doc.close()
+            messagebox.showinfo("Success", f"Compressed PDF saved to:\n{save_path}")
+
+    except Exception as e:
+        messagebox.showerror("Error", f"Compression failed:\n{e}")
+
+
+
 # === GUI Window ===
 root = tk.Tk()
-root.title("Smart PDF Tool")
-root.geometry("420x360")
+root.title("Local PDF")
+root.geometry("420x560")
 root.config(bg="#F7F7F7")  # Light gray background
 
 
@@ -155,6 +312,9 @@ button_style = {
     "bd": 0  # Borderless button
 }
 
+style = Style("flatly")  # You can also try "cosmo", "solar", etc.
+compression_level = tk.IntVar(value=7)  # Default: Medium-High quality
+
 
 tk.Label(root, text="Local PDF", font=("Arial", 14)).pack(pady=15)
 
@@ -162,5 +322,31 @@ tk.Button(root, text="Image to PDF", command=convert_images_to_pdf, **button_sty
 tk.Button(root, text="PDF to Images", command=convert_pdf_to_images, **button_style).pack(pady=10)
 tk.Button(root, text="Merge PDFs", command=merge_pdfs, **button_style).pack(pady=10)
 tk.Button(root, text="Split PDF", command=split_pdf, **button_style).pack(pady=10)
+tk.Button(root, text="Encrypt PDF", command=encrypt_pdf, **button_style).pack(pady=10)
+tk.Button(root, text="Remove PDF Password", command=decrypt_pdf, **button_style).pack(pady=10)
+
+tk.Label(root, text="Compression Quality (1 = Max compression, 10 = Best quality)",
+         font=("Arial", 10), fg="navy").pack()
+frame_slider = tk.Frame(root, bg="#F7F7F7")  # Wrapper frame for horizontal layout
+frame_slider.pack(pady=5)
+
+tk.Label(frame_slider, text="1", font=("Arial", 9), bg="#F7F7F7").pack(side="left", padx=(10, 0))
+
+slider = Scale(frame_slider,
+               from_=1,
+               to=10,
+               orient="horizontal",
+               variable=compression_level,
+               length=200,
+               bootstyle="info")
+slider.pack(side="left", padx=5)
+
+tk.Label(frame_slider, text="10", font=("Arial", 9), bg="#F7F7F7").pack(side="left", padx=(0, 10))
+
+
+tk.Button(root, text="Compress PDF", command=compress_pdf_with_quality, **button_style).pack(pady=10)
+
+
+
 
 root.mainloop()
