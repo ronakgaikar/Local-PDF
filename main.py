@@ -3,7 +3,7 @@ from tkinter import filedialog, messagebox
 from PIL import Image
 from pdf2image import convert_from_path
 import os
-from PyPDF2 import PdfMerger
+from PyPDF2 import PdfMerger, PdfReader, PdfWriter
 
 # === Image(s) to PDF ===
 def convert_images_to_pdf():
@@ -106,10 +106,41 @@ def merge_pdfs():
     except Exception as e:
         messagebox.showerror("Error", f"Failed to merge PDFs at:\n{save_path}")
 
+def split_pdf():
+    pdf_path = filedialog.askopenfilename(
+        title="Select a PDF to split",
+        filetypes=[("PDF files", "*.pdf")]
+    )
+
+    if not pdf_path:
+      return
+    
+    output_folder = filedialog.askdirectory(
+        title="Select Folder to save split pages"
+    )
+
+    if not output_folder:
+        return 
+    
+    try:
+        reader = PdfReader(pdf_path)
+        for i, page in enumerate(reader.pages):
+            writer = PdfWriter()
+            writer.add_page(page)
+
+            output_filename = os.path.join(output_folder, f"page_{i+1}.pdf")
+            with open(output_filename, "wb") as output_pdf:
+                writer.write(output_pdf)
+
+        messagebox.showinfo("Success", f"PDF split into {len(reader.pages)} pages in:\n{output_folder}")
+
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to split PDF:\n{e}")
+
 # === GUI Window ===
 root = tk.Tk()
 root.title("Smart PDF Tool")
-root.geometry("420x260")
+root.geometry("420x360")
 root.config(bg="#F7F7F7")  # Light gray background
 
 
@@ -130,5 +161,6 @@ tk.Label(root, text="Local PDF", font=("Arial", 14)).pack(pady=15)
 tk.Button(root, text="Image to PDF", command=convert_images_to_pdf, **button_style).pack(pady=10)
 tk.Button(root, text="PDF to Images", command=convert_pdf_to_images, **button_style).pack(pady=10)
 tk.Button(root, text="Merge PDFs", command=merge_pdfs, **button_style).pack(pady=10)
+tk.Button(root, text="Split PDF", command=split_pdf, **button_style).pack(pady=10)
 
 root.mainloop()
