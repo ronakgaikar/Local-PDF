@@ -80,11 +80,17 @@ def merge_pdfs():
         messagebox.showwarning("Warning", "Select atleast two files")
         return
     
+    # Get name of first selected file (without folder and extension)
+    first_file_name = os.path.splitext(os.path.basename(pdf_paths[0]))[0]
+    default_filename = f"{first_file_name}_merged.pdf"
+
     save_path = filedialog.asksaveasfilename(
         defaultextension=".pdf",
-        filetypes= [("PDF files", ".pdf")],
-        title="save merged pdf as"
+        initialfile=default_filename,
+        filetypes=[("PDF files", "*.pdf")],
+        title="Save Merged PDF As"
     )
+
 
     if not save_path:
        return
@@ -104,16 +110,25 @@ def merge_pdfs():
 root = tk.Tk()
 root.title("Smart PDF Tool")
 root.geometry("420x260")
+root.config(bg="#F7F7F7")  # Light gray background
+
+
+button_style = {
+    "font": ("Arial", 11),
+    "width": 20,
+    "height": 2,
+    "bg": "#2D89EF",  # Clean blue
+    "fg": "white",    # White text
+    "activebackground": "#1B5EAB",  # Darker blue when clicked
+    "activeforeground": "white",   # White text when clicked
+    "bd": 0  # Borderless button
+}
+
 
 tk.Label(root, text="Local PDF", font=("Arial", 14)).pack(pady=15)
 
-tk.Button(root, text="Image to PDF", font=("Arial", 11),
-          command=convert_images_to_pdf).pack(pady=10)
-
-tk.Button(root, text="PDF to Images", font=("Arial", 11),
-          command=convert_pdf_to_images).pack(pady=10)
-
-tk.Button(root, text="Merge PDFs", font=("Arial", 11),
-          command=merge_pdfs).pack(pady=10)
+tk.Button(root, text="Image to PDF", command=convert_images_to_pdf, **button_style).pack(pady=10)
+tk.Button(root, text="PDF to Images", command=convert_pdf_to_images, **button_style).pack(pady=10)
+tk.Button(root, text="Merge PDFs", command=merge_pdfs, **button_style).pack(pady=10)
 
 root.mainloop()
