@@ -1,6 +1,6 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox
-from PIL import Image
+from tkinter import filedialog, messagebox, simpledialog
+from PIL import Image, ImageTk
 from pdf2image import convert_from_path
 import os
 from PyPDF2 import PdfMerger, PdfReader, PdfWriter
@@ -9,39 +9,35 @@ from ttkbootstrap import Style
 from ttkbootstrap.widgets import Scale
 
 
-# === Image(s) to PDF ===
+# === Image(s)/PDF(s) to One PDF ===
 def convert_images_to_pdf():
     file_paths = filedialog.askopenfilenames(
-        title="Select image(s)",
-        filetypes=[("Image files", "*.jpg *.jpeg *.png *.bmp *.tiff *.webp")]
+        title="Select image(s) or PDF(s)",
+        filetypes=[("Images and PDFs", "*.jpg *.jpeg *.png *.bmp *.tiff *.webp *.pdf")]
     )
-
     if not file_paths:
         return
 
-    try:
-        images = []
-        for path in file_paths:
-            img = Image.open(path)
-            if img.mode in ("RGBA", "P"):
-                img = img.convert("RGB")
-            images.append(img)
+    pdf_writer = PdfWriter()
 
-        save_path = filedialog.asksaveasfilename(
-            defaultextension=".pdf",
-            filetypes=[("PDF files", "*.pdf")],
-            title="Save PDF As"
-        )
+    for file in file_paths:
+        if file.lower().endswith(".pdf"):
+            reader = PdfReader(file)
+            for page in reader.pages:
+                pdf_writer.add_page(page)
+        else:
+            image = Image.open(file).convert("RGB")
+            img_temp = file + ".temp.pdf"
+            image.save(img_temp, "PDF")
+            reader = PdfReader(img_temp)
+            pdf_writer.add_page(reader.pages[0])
+            os.remove(img_temp)
 
-        if save_path:
-            if len(images) == 1:
-                images[0].save(save_path, "PDF")
-            else:
-                images[0].save(save_path, save_all=True, append_images=images[1:])
-            messagebox.showinfo("Success", f"PDF saved to:\n{save_path}")
-
-    except Exception as e:
-        messagebox.showerror("Error", f"Failed to convert image(s):\n{e}")
+    save_path = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF files", "*.pdf")])
+    if save_path:
+        with open(save_path, "wb") as f:
+            pdf_writer.write(f)
+        messagebox.showinfo("Success", f"Saved as {save_path}")
 
 # === PDF to Image(s) ===
 def convert_pdf_to_images():
@@ -293,11 +289,89 @@ def compress_pdf_with_quality():
         messagebox.showerror("Error", f"Compression failed:\n{e}")
 
 
+# === Reorder PDF Pages with Thumbnails ===
+def reorder_pdf_pages():
+    pdf_path = filedialog.askopenfilename(filetypes=[("PDF Files", "*.pdf")])
+    if not pdf_path:
+        return
+
+    reader = PdfReader(pdf_path)
+    pages = list(reader.pages)
+
+    reorder_win = tk.Toplevel()
+    reorder_win.title("Reorder PDF Pages")
+    reorder_win.geometry("500x600")
+
+    canvas = tk.Canvas(reorder_win)
+    scrollbar = tk.Scrollbar(reorder_win, orient="vertical", command=canvas.yview)
+    frame = tk.Frame(canvas)
+
+    frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+    canvas.create_window((0, 0), window=frame, anchor="nw")
+    canvas.configure(yscrollcommand=scrollbar.set)
+
+    canvas.pack(side="left", fill="both", expand=True)
+    scrollbar.pack(side="right", fill="y")
+
+    images = convert_from_path(pdf_path, dpi=72)
+    thumbs = []
+    page_frames = []
+
+    def refresh_display():
+        for widget in frame.winfo_children():
+            widget.destroy()
+        for i, img in enumerate(thumbs):
+            f = tk.Frame(frame, bd=2, relief="raised")
+            lbl = tk.Label(f, image=img)
+            lbl.image = img
+            lbl.pack()
+            tk.Label(f, text=f"Page {i+1}").pack()
+
+            btns = tk.Frame(f)
+            tk.Button(btns, text="▲", command=lambda i=i: move_up(i)).pack(side="left")
+            tk.Button(btns, text="▼", command=lambda i=i: move_down(i)).pack(side="left")
+            btns.pack(pady=5)
+
+            f.pack(pady=5, padx=10, fill="x")
+            page_frames.append(f)
+
+    def move_up(i):
+        if i > 0:
+            thumbs[i-1], thumbs[i] = thumbs[i], thumbs[i-1]
+            pages[i-1], pages[i] = pages[i], pages[i-1]
+            refresh_display()
+
+    def move_down(i):
+        if i < len(thumbs) - 1:
+            thumbs[i+1], thumbs[i] = thumbs[i], thumbs[i+1]
+            pages[i+1], pages[i] = pages[i], pages[i-1]
+            refresh_display()
+
+    # Generate thumbnails
+    for img in images:
+        img.thumbnail((120, 160))
+        thumbs.append(ImageTk.PhotoImage(img))
+
+    refresh_display()
+
+    def save_new_pdf():
+        save_path = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF files", "*.pdf")])
+        if save_path:
+            writer = PdfWriter()
+            for page in pages:
+                writer.add_page(page)
+            with open(save_path, "wb") as f:
+                writer.write(f)
+            messagebox.showinfo("Success", f"Reordered PDF saved as {save_path}")
+
+    tk.Button(reorder_win, text="Save Reordered PDF", command=save_new_pdf).pack(pady=10)
+
+
 
 # === GUI Window ===
 root = tk.Tk()
 root.title("Local PDF")
-root.geometry("420x560")
+root.geometry("420x660")
 root.config(bg="#F7F7F7")  # Light gray background
 
 
@@ -345,6 +419,7 @@ tk.Label(frame_slider, text="10", font=("Arial", 9), bg="#F7F7F7").pack(side="le
 
 
 tk.Button(root, text="Compress PDF", command=compress_pdf_with_quality, **button_style).pack(pady=10)
+tk.Button(root, text="Reorder PDF Pages", command=reorder_pdf_pages, **button_style).pack(pady=10)
 
 
 
