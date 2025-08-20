@@ -6,13 +6,14 @@ An easy, offline PDF utility built using Python. Convert, compress, merge, split
 
 ## ✅ Features
 
-- Convert Image(s) to PDF  
+- Convert Image(s) to PDF [also takes PDF as input]
 - Convert PDF to Image(s)  
 - Merge multiple PDFs  
 - Split PDF into individual pages  
 - Encrypt PDF with a password  
 - Remove PDF password  
 - Compress PDF (with adjustable slider)
+  Reorder pages in PDF
 
 ---
 
