@@ -7,6 +7,9 @@ from PyPDF2 import PdfMerger, PdfReader, PdfWriter
 import fitz  
 from ttkbootstrap import Style
 from ttkbootstrap.widgets import Scale
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
 
 
 # === Image(s)/PDF(s) to One PDF ===
@@ -22,16 +25,40 @@ def convert_images_to_pdf():
 
     for file in file_paths:
         if file.lower().endswith(".pdf"):
+            # If already PDF → append directly
             reader = PdfReader(file)
             for page in reader.pages:
                 pdf_writer.add_page(page)
         else:
-            image = Image.open(file).convert("RGB")
-            img_temp = file + ".temp.pdf"
-            image.save(img_temp, "PDF")
-            reader = PdfReader(img_temp)
+            # --- Convert Image → A4 page ---
+            img = Image.open(file)
+
+            # A4 dimensions in points
+            a4_width, a4_height = A4
+
+            # Resize image keeping aspect ratio
+            img_width, img_height = img.size
+            ratio = min(a4_width / img_width, a4_height / img_height)
+            new_width = int(img_width * ratio)
+            new_height = int(img_height * ratio)
+            img = img.resize((new_width, new_height), Image.LANCZOS)
+
+            # Create temp PDF with A4 size
+            temp_pdf = file + ".temp.pdf"
+            c = canvas.Canvas(temp_pdf, pagesize=A4)
+
+            # Center the image
+            x = (a4_width - new_width) / 2
+            y = (a4_height - new_height) / 2
+            c.drawImage(ImageReader(img), x, y, width=new_width, height=new_height)
+
+            c.showPage()
+            c.save()
+
+            # Add page to writer
+            reader = PdfReader(temp_pdf)
             pdf_writer.add_page(reader.pages[0])
-            os.remove(img_temp)
+            os.remove(temp_pdf)
 
     save_path = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF files", "*.pdf")])
     if save_path:
